@@ -1,0 +1,6 @@
+@Beerest_HostAddress = http://localhost:5162
+
+GET {{Beerest_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -12,5 +12,8 @@ namespace Beerest.Models
         public string? Name { get; set; }
 
         public string? Address { get; set; }
+
+        [ForeignKey("BeerId")]
+        public virtual Beers? Beer { get; set; }
     }
 }

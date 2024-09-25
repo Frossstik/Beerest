@@ -13,9 +13,6 @@ namespace Beerest.Models
 
         public int Age { get; set; }
 
-        [ForeignKey("BeerId")]
-        public virtual Beers? Beer { get; set; }
-
         [ForeignKey("BarId")]
         public virtual Bars? Bar { get; set;}
 

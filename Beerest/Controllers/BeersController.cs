@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Beerest;
+using Newtonsoft.Json;
 using Beerest.Models;
+using X.PagedList.EF;
+using Beerest.HAL;
 
 namespace Beerest.Controllers
 {
@@ -22,11 +19,33 @@ namespace Beerest.Controllers
             _context = context;
         }
 
-        // GET: api/Beers
+        // GET: api/Beers?page=1&pageSize=5
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Beers>>> GetBeers()
+        [Produces("application/hal+json")]
+        public async Task<ActionResult> GetBeers(int page = 1, int pageSize = 5)
         {
-            return await _context.beers.ToListAsync();
+            var beersQuery = _context.beers.AsQueryable();
+            var pagedBeers = await beersQuery.ToPagedListAsync(page, pageSize);
+
+            var response = new BeerHalResponse
+            {
+                Beers = pagedBeers.ToList()
+            };
+
+            string baseUrl = $"{Request.Scheme}://{Request.Host}{Request.Path}";
+            response.Links.Add("self", new HalLink($"{baseUrl}?page={page}&pageSize={pageSize}"));
+
+            if (pagedBeers.HasNextPage)
+            {
+                response.Links.Add("next", new HalLink($"{baseUrl}?page={page + 1}&pageSize={pageSize}"));
+            }
+
+            if (pagedBeers.HasPreviousPage)
+            {
+                response.Links.Add("prev", new HalLink($"{baseUrl}?page={page - 1}&pageSize={pageSize}"));
+            }
+
+            return Ok(response);
         }
 
         // GET: api/Beers/5
@@ -114,4 +133,5 @@ namespace Beerest.Controllers
             return _context.beers.Any(e => e.Id == id);
         }
     }
+
 }

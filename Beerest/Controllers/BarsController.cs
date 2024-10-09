@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Beerest;
 using Beerest.Models;
+using Beerest.Mapping.DTO;
+using AutoMapper;
 
 namespace Beerest.Controllers
 {
@@ -16,24 +18,31 @@ namespace Beerest.Controllers
     public class BarsController : Controller
     {
         private readonly AppDbContext _context;
+        private readonly IMapper _mapper;
 
-        public BarsController(AppDbContext context)
+        public BarsController(AppDbContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
 
         // GET: api/Bars
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Bars>>> GetBars()
         {
-            return await _context.bars.ToListAsync();
+            var bars = await _context.bars
+                .Include(b => b.Beer)
+                .ToListAsync();
+
+            return Ok(bars);
         }
 
         // GET: api/Bars/5
         [HttpGet("{id}")]
         public async Task<ActionResult<Bars>> GetBar(int id)
         {
-            var bar = await _context.bars.FindAsync(id);
+            var bar = await _context.bars.Include(b => b.Beer).FirstOrDefaultAsync(b => b.Id == id);
+
 
             if (bar == null)
             {
@@ -45,12 +54,23 @@ namespace Beerest.Controllers
 
         // POST: api/Bars
         [HttpPost]
-        public async Task<ActionResult<Bars>> PostBar([FromBody] Bars bar)
+        public async Task<ActionResult<Bars>> PostBar(BarsDto barsDto)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
+
+            var bar = _mapper.Map<Bars>(barsDto);
+
+            var beer = await _context.beers.FindAsync(barsDto.BeerId);
+
+            if (beer == null)
+            {
+                return NotFound("Beer is not found!");
+            }
+
+            bar.Beer = beer;
 
             _context.bars.Add(bar);
             await _context.SaveChangesAsync();

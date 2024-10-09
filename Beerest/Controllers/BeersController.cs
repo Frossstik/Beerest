@@ -2,8 +2,8 @@
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using Beerest.Models;
-using X.PagedList.EF;
-using Beerest.HAL;
+using AutoMapper;
+using Beerest.Mapping.DTO;
 
 namespace Beerest.Controllers
 {
@@ -13,39 +13,19 @@ namespace Beerest.Controllers
     public class BeersController : Controller
     {
         private readonly AppDbContext _context;
+        private readonly IMapper _mapper;
 
-        public BeersController(AppDbContext context)
+        public BeersController(AppDbContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
 
-        // GET: api/Beers?page=1&pageSize=5
+        // GET: api/Beers
         [HttpGet]
-        [Produces("application/hal+json")]
-        public async Task<ActionResult> GetBeers(int page = 1, int pageSize = 5)
+        public async Task<ActionResult<IEnumerable<Beers>>> GetBeers()
         {
-            var beersQuery = _context.beers.AsQueryable();
-            var pagedBeers = await beersQuery.ToPagedListAsync(page, pageSize);
-
-            var response = new BeerHalResponse
-            {
-                Beers = pagedBeers.ToList()
-            };
-
-            string baseUrl = $"{Request.Scheme}://{Request.Host}{Request.Path}";
-            response.Links.Add("self", new HalLink($"{baseUrl}?page={page}&pageSize={pageSize}"));
-
-            if (pagedBeers.HasNextPage)
-            {
-                response.Links.Add("next", new HalLink($"{baseUrl}?page={page + 1}&pageSize={pageSize}"));
-            }
-
-            if (pagedBeers.HasPreviousPage)
-            {
-                response.Links.Add("prev", new HalLink($"{baseUrl}?page={page - 1}&pageSize={pageSize}"));
-            }
-
-            return Ok(response);
+            return await _context.beers.ToListAsync();
         }
 
         // GET: api/Beers/5
@@ -64,12 +44,14 @@ namespace Beerest.Controllers
 
         // POST: api/Beers
         [HttpPost]
-        public async Task<ActionResult<Beers>> PostBeer([FromBody] Beers beer)
+        public async Task<ActionResult<Beers>> PostBeer(BeersDto beersDto)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
+
+            var beer = _mapper.Map<Beers>(beersDto);
 
             _context.beers.Add(beer);
             await _context.SaveChangesAsync();

@@ -14,7 +14,7 @@ namespace Beerest.Models
 
         public string? Address { get; set; }
 
-        [ForeignKey("BeerId")]
-        public virtual Beers? Beer { get; set; }
+        [ForeignKey("BeerIds")]
+        public virtual ICollection<Beers> Beers { get; set; } = new List<Beers>();
     }
 }

@@ -9,129 +9,72 @@ using Beerest;
 using Beerest.Models;
 using Beerest.Mapping.DTO;
 using AutoMapper;
+using Beerest.Interfaces;
+using Beerest.Repositories;
 
 namespace Beerest.Controllers
 {
     [ApiController]
-    [Route("[Controller]")]
+    [Route("api/[controller]")]
     [Produces("application/json")]
-    public class BarsController : Controller
+    public class BarsController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly IBarsRepository _repository;
+        private readonly IBeersRepository _beersRepository;
         private readonly IMapper _mapper;
 
-        public BarsController(AppDbContext context, IMapper mapper)
+        public BarsController(IBarsRepository repository, IBeersRepository beersRepository, IMapper mapper)
         {
-            _context = context;
+            _repository = repository;
+            _beersRepository = beersRepository;
             _mapper = mapper;
         }
 
-        // GET: api/Bars
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Bars>>> GetBars()
+        public async Task<IEnumerable<Bars>> GetAllAsync()
         {
-            var bars = await _context.bars
-                .Include(b => b.Beer)
-                .ToListAsync();
-
-            return Ok(bars);
+            return await _repository.GetAllAsync();
         }
 
-        // GET: api/Bars/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Bars>> GetBar(int id)
+        public async Task<Bars?> GetByIdAsync(int id)
         {
-            var bar = await _context.bars.Include(b => b.Beer).FirstOrDefaultAsync(b => b.Id == id);
-
-
-            if (bar == null)
-            {
-                return NotFound();
-            }
-
-            return bar;
+            return await _repository.GetByIdAsync(id);
         }
 
-        // POST: api/Bars
         [HttpPost]
-        public async Task<ActionResult<Bars>> PostBar(BarsDto barsDto)
+        public async Task<IActionResult> CreateAsync([FromBody] BarsDto barsDto)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
             var bar = _mapper.Map<Bars>(barsDto);
+            var beers = new List<Beers>();
 
-            var beer = await _context.beers.FindAsync(barsDto.BeerId);
-
-            if (beer == null)
+            foreach (var beerId in barsDto.BeerIds)
             {
-                return NotFound("Beer is not found!");
-            }
-
-            bar.Beer = beer;
-
-            _context.bars.Add(bar);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetBar), new { id = bar.Id }, bar);
-        }
-
-        // PUT: api/Bars/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutBar(int id, [FromBody] Bars bar)
-        {
-            if (id != bar.Id)
-            {
-                return BadRequest();
-            }
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            _context.Entry(bar).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!BarExists(id))
+                var beer = await _beersRepository.GetByIdAsync(beerId);
+                if (beer == null)
                 {
                     return NotFound();
                 }
-                else
-                {
-                    throw;
-                }
+                beers.Add(beer);
             }
 
-            return NoContent();
+            bar.Beers = beers;
+
+            await _repository.CreateAsync(bar);
+            return Ok(bar);
         }
 
-        // DELETE: api/Bars/5
+        [HttpPut("{id}")]
+        public async Task UpdateAsync(int id, [FromBody] Bars bar)
+        {
+            if (id != bar.Id) return;
+            await _repository.UpdateAsync(bar);
+        }
+
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteBar(int id)
+        public async Task DeleteAsync(int id)
         {
-            var bar = await _context.bars.FindAsync(id);
-            if (bar == null)
-            {
-                return NotFound();
-            }
-
-            _context.bars.Remove(bar);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
-        private bool BarExists(int id)
-        {
-            return _context.bars.Any(e => e.Id == id);
+            await _repository.DeleteAsync(id);
         }
     }
 }

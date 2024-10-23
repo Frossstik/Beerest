@@ -10,20 +10,24 @@ using Beerest.Models;
 using System.Dynamic;
 using AutoMapper;
 using Beerest.Mapping.DTO;
+using Beerest.Interfaces;
+using Beerest.Repositories;
 
 namespace Beerest.Controllers
 {
     [ApiController]
-    [Route("[Controller]")]
+    [Route("api/[controller]")]
     [Produces("application/json")]
-    public class PersonsController : Controller
+    public class PersonsController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly IPersonsRepository _repository;
+        private readonly IBarsRepository _barsRepository;
         private readonly IMapper _mapper;
 
-        public PersonsController(AppDbContext context, IMapper mapper)
+        public PersonsController(IPersonsRepository repository, IMapper mapper, IBarsRepository barsRepository)
         {
-            _context = context;
+            _repository = repository;
+            _barsRepository = barsRepository;
             _mapper = mapper;
         }
 
@@ -38,131 +42,74 @@ namespace Beerest.Controllers
             return links;
         }
 
-        // GET: api/Persons
         [HttpGet]
         [Produces("application/hal+json")]
-        public async Task<ActionResult<IEnumerable<Persons>>> GetPersons(int index = 0, int count = 5)
+        public async Task<IActionResult> GetAllAsync(int index = 0, int count = 5)
         {
-            var total = await _context.persons.CountAsync();
+            var persons = await _repository.GetAllAsync();
+            var total = persons.Count();
+            var pagedPersons = persons.Skip(index).Take(count).ToList();
 
-            var items = await _context.persons
-                .Skip(index)
-                .Take(count)
-                .Include(p => p.Bar)
-                .ThenInclude(b => b.Beer)
-                .ToListAsync();
+            var links = Paginate(Request.Path.ToString(), index, count, total);
 
-          
-            var _links = Paginate("/api/persons", index, count, total);
-
-            var result = new
+            return Ok(new
             {
-                _links,
-                index,
-                count,
                 total,
-                items
-            };
-
-            return Ok(result);
+                count = pagedPersons.Count,
+                index,
+                items = pagedPersons.Select(p => _mapper.Map<Persons>(p)),
+                _links = links
+            });
         }
 
-        // GET: api/Persons/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Persons>> GetPerson(int id)
+        public async Task<Persons?> GetByIdAsync(int id)
         {
-            var person = await _context.persons.Include(p => p.Bar).ThenInclude(b => b.Beer).FirstOrDefaultAsync(p => p.Id == id);
-
-            if (person == null)
-            {
-                return NotFound();
-            }
-
-            return person;
+            return await _repository.GetByIdAsync(id);
         }
 
-        // POST: api/Persons
         [HttpPost]
-        public async Task<ActionResult<Persons>> PostPerson(PersonsDto personsDto)
+        public async Task<IActionResult> CreateAsync([FromBody] PersonsDto personsDto)
         {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
             var person = _mapper.Map<Persons>(personsDto);
 
-            var bar = await _context.bars
-                .Include(b => b.Beer) 
-                .FirstOrDefaultAsync(b => b.Id == personsDto.BarId);
-
-            if (bar == null)
+            if (personsDto.BarId.HasValue)
             {
-                return NotFound("Bar is not found!");
-            }
+                var bar = await _barsRepository.GetByIdAsync(personsDto.BarId.Value);
 
-            person.Bar = bar;
-
-            _context.persons.Add(person);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetPerson), new { id = person.Id }, person);
-        }
-
-        // PUT: api/Persons/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutPerson(int id, [FromBody] Persons person)
-        {
-            if (id != person.Id)
-            {
-                return BadRequest();
-            }
-
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            _context.Entry(person).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!PersonExists(id))
+                if (bar == null)
                 {
                     return NotFound();
                 }
-                else
-                {
-                    throw;
-                }
+
+                person.Bar = bar;
             }
+
+            await _repository.CreateAsync(person);
+            return Ok(person);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateAsync(int id, [FromBody] PersonsDto personsDto)
+        {
+            var person = await _repository.GetByIdAsync(id);
+            if (person == null) return NotFound();
+
+            _mapper.Map(personsDto, person);
+            await _repository.UpdateAsync(person);
 
             return NoContent();
         }
 
-        // DELETE: api/Persons/5
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeletePerson(int id)
+        public async Task<IActionResult> DeleteAsync(int id)
         {
-            var person = await _context.persons.FindAsync(id);
-            if (person == null)
-            {
-                return NotFound();
-            }
+            var person = await _repository.GetByIdAsync(id);
+            if (person == null) return NotFound();
 
-            _context.persons.Remove(person);
-            await _context.SaveChangesAsync();
-
+            await _repository.DeleteAsync(id);
             return NoContent();
-        }
-
-        private bool PersonExists(int id)
-        {
-            return _context.persons.Any(e => e.Id == id);
         }
     }
+
 }

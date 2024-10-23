@@ -4,6 +4,6 @@
     {
         public string? Name { get; set; }
         public string? Address { get; set; }
-        public int? BeerId { get; set; }
+        public List<int> BeerIds { get; set; } = new List<int>();
     }
 }

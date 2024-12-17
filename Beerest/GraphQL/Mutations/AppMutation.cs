@@ -3,8 +3,8 @@ using Beerest.GraphQL.Types;
 using Beerest.Interfaces;
 using Beerest.Mapping.DTO;
 using Beerest.Models;
-using Microsoft.EntityFrameworkCore;
-using System.Threading.Tasks;
+using CheckService;
+using MassTransit;
 
 namespace Beerest.GraphQL.Mutations
 {
@@ -14,13 +14,23 @@ namespace Beerest.GraphQL.Mutations
         private readonly IBeersRepository _beersRepository;
         private readonly IPersonsRepository _personsRepository;
         private readonly IMapper _mapper;
+        private readonly IPublishEndpoint _publishEndpoint;
+        private readonly IBusControl _bus;
 
-        public AppMutation(IBarsRepository barsRepository, IBeersRepository beersRepository, IPersonsRepository personsRepository, IMapper mapper)
+        public AppMutation(
+            IBarsRepository barsRepository, 
+            IBeersRepository beersRepository, 
+            IPersonsRepository personsRepository, 
+            IMapper mapper,
+            IPublishEndpoint publishEndpoint,
+            IBusControl bus)
         {
             _barsRepository = barsRepository;
             _beersRepository = beersRepository;
             _personsRepository = personsRepository;
             _mapper = mapper;
+            _publishEndpoint = publishEndpoint;
+            _bus = bus;
         }
 
         public async Task<BarsType> CreateBar(BarsDto input)
@@ -118,6 +128,34 @@ namespace Beerest.GraphQL.Mutations
             context.persons.Remove(person);
             await context.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<string> PublishCheckMessage(CreateCheckMessage input)
+        {
+            await _publishEndpoint.Publish<CreateCheckMessage>(input, context =>
+            {
+                context.SetRoutingKey("create-check-routing-key");
+            });
+
+            var requestClient = _bus.CreateRequestClient<CreateCheckMessage>();
+
+
+
+            try
+            {
+                var response = await requestClient.GetResponse<FileGeneratedMessage>(input, timeout: TimeSpan.FromSeconds(30));
+
+                return response.Message.FilePath;
+            }
+            catch (RequestTimeoutException)
+            {
+                return "Request timed out. No response received.";
+            }
+        }
+
+        private class FileGeneratedMessage
+        {
+            public string FilePath { get; set; }
         }
     }
 }

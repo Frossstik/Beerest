@@ -16,5 +16,7 @@ namespace Beerest.Models
         public int Volume { get; set; }
 
         public int VolumeAlc { get; set; }
+
+        public double Price { get; set; }
     }
 }

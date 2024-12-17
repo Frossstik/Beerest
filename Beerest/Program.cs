@@ -4,10 +4,21 @@ using Beerest.GraphQL.Queries;
 using Beerest.Interfaces;
 using Beerest.Mapping;
 using Beerest.Repositories;
+using MassTransit;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ConfigureEndpointDefaults(endpointOptions =>
+    {
+        endpointOptions.Protocols = HttpProtocols.Http2;
+    });
+});
+
 
 // Add services to the container.
 
@@ -26,6 +37,30 @@ builder.Services.AddAutoMapper(typeof(MappingProfile));
 builder.Services.AddGraphQLServer()
         .AddQueryType<AppQuery>()
         .AddMutationType<AppMutation>();
+
+builder.Host.UseSerilog((context, services, configuration) =>
+    configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .Enrich.FromLogContext()
+        .WriteTo.Console());
+
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host("localhost", "/", h =>
+        {
+            h.Username("user");
+            h.Password("rabbitmq");
+            h.Heartbeat(30);
+      
+        });
+
+        cfg.ConfigureEndpoints(context);
+    });
+
+});
+
 
 var app = builder.Build();
 

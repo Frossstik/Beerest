@@ -2,6 +2,7 @@
 using Beerest.GraphQL.Types;
 using Beerest.Mapping.DTO;
 using Beerest.Models;
+using CheckService;
 
 namespace Beerest.Mapping
 {
@@ -22,6 +23,11 @@ namespace Beerest.Mapping
                 .ForMember(dest => dest.Bar, opt => opt.MapFrom(src => src.Bar));
             CreateMap<Bars, BarsType>()
                 .ForMember(dest => dest.Beers, opt => opt.MapFrom(src => src.Beers));
+
+            CreateMap<CreateCheckMessage, CreateCheckRequest>()
+                .ForMember(dest => dest.Items, opt => opt.MapFrom(src => src.Items));
+
+            CreateMap<CheckItemDto, CheckItem>();
         }
     }
 }

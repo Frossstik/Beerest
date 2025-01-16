@@ -4,8 +4,8 @@ using Beerest.gRPC;
 using Beerest.Interfaces;
 using Beerest.Mapping.DTO;
 using Beerest.Models;
+using Beerest.RabbitMQ;
 using CheckService;
-using MassTransit;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Security.Policy;
@@ -19,18 +19,20 @@ public class BeersController : ControllerBase
     private readonly AppDbContext _context;
     private readonly IBeersRepository _repository;
     private readonly IMapper _mapper;
-    //private readonly CheckServicePublisher _publisher;
     private readonly CheckServiceClient _checkServiceClient;
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly RabbitMqPublisher _rabbitMqPublisher;
 
-    public BeersController(IBeersRepository repository, IMapper mapper, IPublishEndpoint publishEndpoint, AppDbContext context)
+    public BeersController(
+        IBeersRepository repository, 
+        IMapper mapper, 
+        AppDbContext context, 
+        RabbitMqPublisher rabbitMqPublisher)
     {
         _repository = repository;
         _mapper = mapper;
-        //_publisher = publisher;
-        _publishEndpoint =  publishEndpoint;
         _checkServiceClient = new CheckServiceClient("http://localhost:5100");
         _context = context;
+        _rabbitMqPublisher = rabbitMqPublisher;
     }
 
     [HttpGet]
@@ -67,38 +69,6 @@ public class BeersController : ControllerBase
         await _repository.DeleteAsync(id);
     }
 
-    [HttpPost("create-check-async")]
-    public async Task<IActionResult> CreateCheckAsync([FromBody] CreateCheckMessage requestMessage)
-    {
-        var beers = _context.beers
-            .Select(b => new CheckItemDto
-            {
-                Name = b.Name ?? "Неизвестное пиво",
-                Price = b.Price
-            })
-            .ToList();
-
-        if (!beers.Any())
-        {
-            return BadRequest("Пива нету!");
-        }
-
-        await _publishEndpoint.Publish(requestMessage, context =>
-        {
-            context.SetRoutingKey("create-check-routing-key");
-        });
-
-
-        var json = JsonSerializer.Serialize(requestMessage);
-        Console.WriteLine($"Serialized message: {json}");
-
-
-        return Ok(new { Message = "Ушло на шину!" });
-    }
-
-
-
-
     [HttpPost("create-check")]
     public async Task<IActionResult> CreateCheck([FromBody] CreateCheckMessage requestMessage)
     {
@@ -107,6 +77,16 @@ public class BeersController : ControllerBase
         var response = await _checkServiceClient.CreateCheckAsync(grpcRequest);
 
         return Ok(new { FilePath = response.FilePath });
+    }
+
+    [HttpPost("create-check-async")]
+    public async Task<IActionResult> CreateCheckAsync([FromBody] CreateCheckMessage requestMessage)
+    {
+        var request = _mapper.Map<CreateCheckRequest>(requestMessage);
+
+        await _rabbitMqPublisher.PublishMessageAsync(request);
+
+        return Accepted(new { Message = "Check creation request has been queued" });
     }
 
 }

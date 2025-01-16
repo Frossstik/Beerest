@@ -3,8 +3,9 @@ using Beerest.GraphQL.Mutations;
 using Beerest.GraphQL.Queries;
 using Beerest.Interfaces;
 using Beerest.Mapping;
+using Beerest.Mapping.DTO;
+using Beerest.RabbitMQ;
 using Beerest.Repositories;
-using MassTransit;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -31,6 +32,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped(typeof(IBeersRepository), typeof(BeersRepository));
 builder.Services.AddScoped(typeof(IBarsRepository), typeof(BarsRepository));
 builder.Services.AddScoped(typeof(IPersonsRepository), typeof(PersonsRepository));
+builder.Services.AddSingleton<RabbitMqPublisher>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddAutoMapper(typeof(MappingProfile));
@@ -38,28 +40,6 @@ builder.Services.AddGraphQLServer()
         .AddQueryType<AppQuery>()
         .AddMutationType<AppMutation>();
 
-builder.Host.UseSerilog((context, services, configuration) =>
-    configuration
-        .ReadFrom.Configuration(context.Configuration)
-        .Enrich.FromLogContext()
-        .WriteTo.Console());
-
-builder.Services.AddMassTransit(x =>
-{
-    x.UsingRabbitMq((context, cfg) =>
-    {
-        cfg.Host("localhost", "/", h =>
-        {
-            h.Username("user");
-            h.Password("rabbitmq");
-            h.Heartbeat(30);
-      
-        });
-
-        cfg.ConfigureEndpoints(context);
-    });
-
-});
 
 
 var app = builder.Build();
